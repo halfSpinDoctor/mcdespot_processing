@@ -34,17 +34,17 @@ The script will create a number of directories to organise the results of
 pre-processing (mask, registration, etc), and to collect the output of the
 cluster slurm jobs. These are created from the folder where the script is run:
 
-originalData
+originalData -
   the original images, in NIfTI format (converted from DICOM using dcm2niix)
   
-maskedData
+maskedData -
   brain mask and refweight (used for registration). Images reoriented to axial
   
-registredData
+registredData -
   all images aligned to the 1st SPGR image. Uses flirt with -refweight
 
-singleComponent
+singleComponent -
   single component T1 and T2 maps, and B1 and f0 (off-resonance) calibration maps
   
-multiComponent
+multiComponent -
   output of mcDESPOT multicomponent fitting. See QUIT documentation for details
