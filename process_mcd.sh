@@ -1,13 +1,72 @@
 #!/bin/bash
 
-# process_mcd.sh
+## process_mcd.sh
 #
 # Shell script to process Karen's mcDESPOT study data using QUIT pacakage.
 # mcDESPOT processing is parallelised by slice
 #
 
+## BSD 2-Clause License
+#
+# Copyright (c) 2017, Samuel A. Hurley
+# University of Wisconsin - Madison
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# * Redistributions of source code must retain the above copyright notice, this
+#   list of conditions and the following disclaimer.
+#
+# * Redistributions in binary form must reproduce the above copyright notice,
+#   this list of conditions and the following disclaimer in the documentation
+#   and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+## USER SETTINGS
+#
+# Set scan and fitting parameters here
+#
+#
+# SPGR Scan Parameters
+SPGR_FLIP="3 4 5 6 7 9 13 18"
+SPGR_TR="0.0053"
+
+# IRSPGR Scan Parameters
+IRSPGR_FLIP="5"
+IRSPGR_TR="0.0053"
+IRSPGR_NPE="96"
+IRSPGR_TI="0.450"
+#
+# SSFP Scan Parameters
+SSFP_FLIP="9.7059 12.9412 16.9853 21.8382 26.6912 32.3529 41.2500 55.0000"
+SSFP_PHASE="0 180"
+SSFP_TR="0.0054"
+#
 # Set number of threads used for DESPOT2-FM and mcDESPOT (Default is 4)
 NUM_THREADS=8
+#
+# END OF USER SETTINGS
+
+
+## QUIT SETTINGS
+#
+# Settings passed to the QUIT software package
+#
+export QUIT_EXT=NIFTI_GZ
+export FSLOUTPUTTYPE=NIFTI_GZ
+#
+# END OF QUIT SETTINGS
 
 # trap keyboard interrupt (control-c)
 trap control_c SIGINT
@@ -58,7 +117,7 @@ ii=1;
 cat spgr_list | while read fname
 do
 	echo $fname;
-	dcm2niix -b y -f spgr_$ii -o originalData/spgr $fname
+	dcm2niix -b y -z y -f spgr_$ii -o originalData/spgr $fname
 	ii=`expr $ii + 1`
 done
 
@@ -66,7 +125,7 @@ ii=1;
 cat irspgr_list | while read fname
 do
 	echo $fname;
-	dcm2niix -b y -f irspgr_$ii -o originalData/irspgr $fname
+	dcm2niix -b y -z y -f irspgr_$ii -o originalData/irspgr $fname
 	ii=`expr $ii + 1`
 done
 
@@ -74,7 +133,7 @@ ii=1;
 cat ssfp_0_list | while read fname
 do
 	echo $fname;
-	dcm2niix -b y -f ssfp_0_$ii -o originalData/ssfp_0 $fname
+	dcm2niix -b y -z y -f ssfp_0_$ii -o originalData/ssfp_0 $fname
 	ii=`expr $ii + 1`
 done
 
@@ -82,7 +141,7 @@ ii=1;
 cat ssfp_180_list | while read fname
 do
 	echo $fname;
-	dcm2niix -b y -f ssfp_180_$ii -o originalData/ssfp_180 $fname
+	dcm2niix -b y -z y -f ssfp_180_$ii -o originalData/ssfp_180 $fname
 	ii=`expr $ii + 1`
 done
 
@@ -197,12 +256,12 @@ fslmerge -t registeredData/ssfp_merge registeredData/ssfp_0/ssfp_0* registeredDa
 #
 
 qidespot1hifi --out singleComponent/ --mask maskedData/brainmask.nii.gz --verbose registeredData/spgr_merge.nii.gz registeredData/irspgr_merge.nii.gz << EOL
-3 4 5 6 7 9 13 18
-0.0053
-5
-0.0053
-96
-0.450
+$SPGR_FLIP
+$SPGR_TR
+$IRSPGR_FLIP
+$IRSPGR_TR
+$IRSPGR_NPE
+$IRSPGR_TI
 EOL
 
 
@@ -220,9 +279,9 @@ cat > despot2fm_job.sh << EOF
 #!/bin/bash
 
 qidespot2fm --start \$SLURM_ARRAY_TASK_ID --stop \`expr \$SLURM_ARRAY_TASK_ID + 1\` --out singleComponent/slice_"\$(printf %04d \$SLURM_ARRAY_TASK_ID)"_ --mask maskedData/brainmask.nii.gz --B1 singleComponent/HIFI_B1.nii --threads $NUM_THREADS --verbose singleComponent/HIFI_T1.nii registeredData/ssfp_merge.nii.gz << EOL
-9.7059 12.9412 16.9853 21.8382 26.6912 32.3529 41.2500 55.0000
-0 180
-0.0054
+$SSFP_FLIP
+$SSFP_PHASE
+$SSFP_TR
 EOL
 
 # Trim the output to a single slice
@@ -241,7 +300,6 @@ fslroi singleComponent/slice_"\$(printf %04d \$SLURM_ARRAY_TASK_ID)"_FM_T2 singl
 
 # Clean up full volume images (extension of .nii)
 rm -f singleComponent/slice_"\$(printf %04d \$SLURM_ARRAY_TASK_ID)"_FM_f0 singleComponent/slice_"\$(printf %04d \$SLURM_ARRAY_TASK_ID)"_*.nii
-
 EOF
 # <end: slurm script>
 
@@ -293,21 +351,28 @@ rm -f singleComponent/slice_*
 # Enter TR (seconds): 0.0054
 # Enter next filename (END to finish input): END
 
+# Normalize input data by proton density maps - NOT USED
+fslmaths registeredData/spgr_merge.nii.gz -div singleComponent/HIFI_PD.nii registeredData/spgr_merge_norm
+fslmaths registeredData/ssfp_merge.nii.gz -div singleComponent/FM_PD.nii.gz registeredData/ssfp_merge_norm
+
+
 # Generate a bash script to submit a slurm job
 # <start: slurm script>
 cat > mcdespot_job.sh << EOF
 #!/bin/bash
 
-qimcdespot --start \$SLURM_ARRAY_TASK_ID --stop \`expr \$SLURM_ARRAY_TASK_ID + 1\` --out multiComponent/slice_"\$(printf %04d \$SLURM_ARRAY_TASK_ID)"_ --mask maskedData/brainmask.nii.gz --model 3 --tesla 3 --B1 singleComponent/HIFI_B1.nii --f0 singleComponent/FM_f0.nii.gz --threads $NUM_THREADS --verbose << EOL
+# qimcdespot --start \$SLURM_ARRAY_TASK_ID --stop \`expr \$SLURM_ARRAY_TASK_ID + 1\` --out multiComponent/slice_"\$(printf %04d \$SLURM_ARRAY_TASK_ID)"_ --mask maskedData/brainmask.nii.gz --model 3 --tesla 3 --B1 singleComponent/HIFI_B1.nii --f0 singleComponent/FM_f0.nii.gz --threads $NUM_THREADS --verbose << EOL
+# normalise signals to mean (--scale)
+qimcdespot --start \$SLURM_ARRAY_TASK_ID --stop \`expr \$SLURM_ARRAY_TASK_ID + 1\` --out multiComponent/slice_"\$(printf %04d \$SLURM_ARRAY_TASK_ID)"_ --scale --mask maskedData/brainmask.nii.gz --model 3 --tesla 3 --B1 singleComponent/HIFI_B1.nii --f0 singleComponent/FM_f0.nii.gz --threads $NUM_THREADS --verbose << EOL
 registeredData/spgr_merge.nii.gz
 SPGR
-3 4 5 6 7 9 13 18
-0.0053
+$SPGR_FLIP
+$SPGR_TR
 registeredData/ssfp_merge.nii.gz
 SSFP
-9.7059 12.9412 16.9853 21.8382 26.6912 32.3529 41.2500 55.0000
-0 180
-0.0054
+$SSFP_FLIP
+$SSFP_PHASE
+$SSFP_TR
 END
 EOL
 
@@ -353,7 +418,7 @@ fslroi multiComponent/slice_"\$(printf %04d \$SLURM_ARRAY_TASK_ID)"_3C_tau_m mul
 
 
 # Clean up full volume images (extension of .nii)
-# Not necessary for qimcdespot, because it writes out NII_GZ instead of NII
+# Not needed if output type is set to NIFTI_GZ
 # rm -f singleComponent/slice_"\$(printf %04d \$SLURM_ARRAY_TASK_ID)"_FM_f0 multiComponent/slice_"\$(printf %04d \$SLURM_ARRAY_TASK_ID)"_*.nii
 
 EOF
@@ -364,13 +429,15 @@ nslice=`fslval registeredData/ssfp_merge dim3`
 nslice=`expr $nslice - 1`
 
 # Run jobs on SLURM and wait to finish
-jobIDs=`sbatch --array=0-$nslice --ntasks=1 --cpus-per-task=$NUM_THREADS mcdespot_job.sh  | rev | cut -f1 -d\ | rev`
+jobIDs=`sbatch --array=0-$nslice mcdespot_job.sh  | rev | cut -f1 -d\ | rev`
+# jobIDs=`sbatch --array=0-$nslice --ntasks=1 --cpus-per-task=$NUM_THREADS mcdespot_job.sh  | rev | cut -f1 -d\ | rev`
 echo
 echo "--------------------------------------------------------------------------------------"
-echo " Starting DESPOT2-FM on SLURM cluster. Submitted $nslice jobs "
+echo " Starting mcDESPOT on SLURM cluster. Submitted $nslice jobs "
 echo "--------------------------------------------------------------------------------------"
-    # now wait for the jobs to finish.
-	./waitForSlurmJobs_sah.pl 1 60 $jobIDs
+
+# now wait for the jobs to finish.
+./waitForSlurmJobs_sah.pl 1 60 $jobIDs
 
 # Returns 1 if there are errors
 if [ ! $? -eq 0 ]; then
@@ -382,7 +449,7 @@ fi
 # Cleanup slurm command line output
 mv slurm-*.out slurmOutput
 
-# Merge DESPOT2-FM output slices into single volume
+# Merge mcDESPOT output slices into single volume
 
 # Calibration maps (B1, off-resonance [f0])
 fslmerge -z multiComponent/3C_B1 multiComponent/slice_*_3C_B1.nii.gz
@@ -413,23 +480,3 @@ cat multiComponent/slice_*3C_bounds.txt > multiComponent/3C_bounds.txt
 
 # Clean up
 rm -f multiComponent/slice_*
-
-
-## 9. NOTES AND COMMENTS:
-#
-# SPGR Flips:     3.0000    4.0000    5.0000    6.0000    7.0000    9.0000   13.0000   18.0000
-# SSFP Flips:     9.7059   12.9412   16.9853   21.8382   26.6912   32.3529   41.2500   55.0000
-#
-# Make sure same RF pulse is used (same RF duration and TBWP) for SPGR, SSFP, and IR-SPGR, also same orentation (sag/cor/ax)
-#   - See from protocol notes that "RF Pulse Type" is set to Low SAR for all sequences - this can sometimes have different
-#     duration, other parameters between the SPGR and bSSFP sequences
-# Make sure there is no wrap-around in SSFP
-# Banding in bSSFP: reduce RO BW to avoid bands due to eddy currents
-#
-# - Parallel imaging artefact in hifi residual (see screenshot)
-#
-# Things that look good:
-# SSFP TE = 1/2 TR
-# - note that SPGR, IR-SPGR, and SSFP TR do NOT have to match for things to work well (could save time)
-#
-
